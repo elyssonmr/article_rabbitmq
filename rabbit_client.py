@@ -1,6 +1,8 @@
 import asyncio
+from typing import List
 
-from aio_pika import Message, connect_robust
+from aio_pika import ExchangeType, Message, connect_robust
+from aio_pika.abc import AbstractChannel, AbstractExchange
 
 
 class RabbitMQClient:
@@ -40,6 +42,56 @@ class RabbitMQClient:
             message,
             routing_key=routing_key
         )
+
+    async def publish_fanout(self, message: str, routing_key: str, priority: int = 1):
+        exchange = await self.declare_fanout_exchange(
+            routing_key, self._publish_channel
+        )
+
+        message = Message(
+            message.encode('utf-8'),
+            priority=priority
+        )
+
+        await exchange.publish(
+            message, routing_key
+        )
+
+    async def declare_fanout_exchange(
+        self,
+        exchange_name: str,
+        channel: AbstractChannel | None = None
+    ) -> AbstractExchange | None:
+        if channel:
+            return await channel.declare_exchange(
+                exchange_name,
+                ExchangeType.FANOUT,
+                durable=True
+            )
+
+        async with self._conn.channel() as channel:
+            await channel.declare_exchange(
+                exchange_name,
+                ExchangeType.FANOUT,
+                durable=True
+            )
+
+
+    async def bind_queues_to_fanout_exchange(
+        self, queue_names: List[str], exchange_name: str
+    ):
+        async with self._conn.channel() as channel:
+            fanout_exchange = await self.declare_fanout_exchange(
+                exchange_name,
+                channel
+            )
+            for queue_name in queue_names:
+                queue = await channel.declare_queue(
+                    queue_name,
+                    durable=True,
+                    arguments={'x-max-priority': 5}
+                )
+                await queue.bind(fanout_exchange)
 
     async def consume(self, queue, on_message, pre_fetch=1):
         async with self._conn.channel() as channel:

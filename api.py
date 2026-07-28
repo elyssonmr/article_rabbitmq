@@ -1,3 +1,4 @@
+from decimal import Decimal
 import random
 import json
 
@@ -29,13 +30,19 @@ class OrderSchema(BaseModel):
     address: str
 
 
+def random_price() -> Decimal:
+    return Decimal(random.randint(500, 2500)).scaleb(-2)
+
+
 @app.post('/order')
 async def order(client_order: OrderSchema, rabbit_client: T_RabbitMQClient):
     # Save Order first
     message = client_order.model_dump(mode='json')
-    routing_key = 'kitchen'
+    # Retrieve price from database
+    message['price'] = str(random_price())
+    routing_key = 'order_fanout'
 
-    await rabbit_client.publish_direct(
+    await rabbit_client.publish_fanout(
         json.dumps(message),
         routing_key,
         priority=random.randint(1, 4),

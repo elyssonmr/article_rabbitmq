@@ -25,6 +25,12 @@ async def main():
     await client.start()
 
     queue = 'kitchen'
+    fanout_exchange = 'order_fanout'
+
+    await client.bind_queues_to_fanout_exchange(
+        [queue], fanout_exchange
+    )
+
     consume_func = partial(prepare_snack, client)
     await client.consume(queue, consume_func)
 
